@@ -72,9 +72,9 @@ struct Vertex {
 };
 
 struct UniformBufferObject {
-	glm::mat4 model;
-	glm::mat4 view;
-	glm::mat4 proj;
+	alignas(16) glm::mat4 model;
+	alignas(16) glm::mat4 view;
+	alignas(16) glm::mat4 proj;
 };
 
 const std::vector<const char*> validationLayers = {
@@ -176,7 +176,7 @@ private:
 
 		vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 
-		//updateUniformBuffer(currentFrame);
+		updateUniformBuffer(currentFrame);
 
 		recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 		VkSubmitInfo submitInfo{};
@@ -228,14 +228,14 @@ private:
 	void cleanup() {
 		cleanupSwapChain();
 
-		//for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-		//    vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-		//    vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
-		//}
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+		    vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+		    vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+		}
 
-		//vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-		//vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
 		vkDestroyBuffer(device, indexBuffer, nullptr);
 		vkFreeMemory(device, indexBufferMemory, nullptr);
@@ -296,15 +296,15 @@ private:
 		createSwapChain();
 		createImageViews();
 		createRenderPass();
-		//createDescriptorSetLayout();
+		createDescriptorSetLayout();
 		createGraphicsPipeline();
 		createFramebuffers();
 		createCommandPool();
 		createVertexBuffer();
 		createIndexBuffer();
-		//CreateUniformBuffers();
-		//createDescriptorPool();
-		//createDescriptionSets();
+		createUniformBuffers();
+		createDescriptorPool();
+		createDescriptionSets();
 		createCommandBuffers();
 		createSyncObjects();
 	}
@@ -459,7 +459,7 @@ private:
 		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 		rasterizer.lineWidth = 1.0f;
 		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-		rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;//VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		rasterizer.frontFace = /*VK_FRONT_FACE_CLOCKWISE;*/VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
 		rasterizer.depthBiasEnable = VK_FALSE;
 		rasterizer.depthBiasConstantFactor = 0.0f;
@@ -502,8 +502,8 @@ private:
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 0/*1*/;
-		pipelineLayoutInfo.pSetLayouts = nullptr/*&descriptorSetLayout*/;
+		pipelineLayoutInfo.setLayoutCount = 1;
+		pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 		pipelineLayoutInfo.pushConstantRangeCount = 0;
 		pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
@@ -865,16 +865,19 @@ private:
 		}
 	}
 
-	void CreateUniformBuffers() {
+	void createUniformBuffers() {
 		VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
 		uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 		uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+		uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
 			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				uniformBuffers[i], uniformBuffersMemory[i]);
+
+			vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
 		}
 	}
 
@@ -998,7 +1001,7 @@ private:
 
 		std::cout << "DeviceName: " << deviceProperties.deviceName << std::endl;
 
-		return /*(deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) && */indices.isComplete() && extensionsSupported && swapChainAdequate;
+		return (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) && indices.isComplete() && extensionsSupported && swapChainAdequate;
 	}
 
 	bool checkValidationLayerSupport() {
@@ -1294,7 +1297,9 @@ private:
 		scissor.extent = swapChainExtent;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		//vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+		
+		
 		//vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
@@ -1346,10 +1351,10 @@ private:
 
 		ubo.proj[1][1] *= -1;
 
-		void* data;
-		vkMapMemory(device, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
-		memcpy(data, &ubo, sizeof(ubo));
-		vkUnmapMemory(device, uniformBuffersMemory[currentImage]);
+		//void* data;
+		//vkMapMemory(device, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
+		memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+		//vkUnmapMemory(device, uniformBuffersMemory[currentImage]);
 	}
 
 	GLFWwindow* window;
@@ -1389,6 +1394,7 @@ private:
 
 	std::vector<VkBuffer> uniformBuffers;
 	std::vector<VkDeviceMemory> uniformBuffersMemory;
+	std::vector<void*> uniformBuffersMapped;
 
 	std::vector<VkCommandBuffer> commandBuffers;
 
