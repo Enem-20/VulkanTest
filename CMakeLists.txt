@@ -35,6 +35,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 target_include_directories(${PROJECT_NAME} PRIVATE 
 	external/VulkanHpp/Vulkan-Headers/include
 	external/glm
+	external/stb
 )
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
